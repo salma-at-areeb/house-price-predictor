@@ -24,6 +24,35 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt 
 
-    - name: Run tests
+    - name: Run data processing tests
       run: |
-        pytest tests/
+        python src/data/run_processing.py \
+          --input data/raw/house_data.csv \
+          --output data/processed/cleaned_house_data.csv
+
+    - name: Run feature engeneering
+      run: |
+        python src/features/engineer.py \
+          --input data/processed/cleaned_house_data.csv \
+          --output data/processed/featured_house_data.csv \
+          --preprocessor models/trained/preprocessor.pkl
+
+    - name: Setup MLFlow
+      run: |
+        docker pull ghcr.io/mlflow/mlflow:latest
+        docker run -d -p 5555:5000 --name mlflow-tracking-server/
+         ghcr.io/mlflow/mlflow:latest/
+          mlflow server --host 0.0.0.0 --backend-store-uri sqlite:///mlflow.db --default-artifact-root /tmp/mlruns
+
+    - name: Train model
+      run: | 
+        python src/models/train_model.py \
+        --config configs/model_config.yaml \
+        --data data/processed/featured_house_data.csv \
+        --models-dir models \
+        --mlflow-tracking-uri http://localhost:5555
+
+    - name: Cleanup MLFlow
+      run: | 
+        docker stop mlflow-tracking-server
+        docker rm mlflow-tracking-server
